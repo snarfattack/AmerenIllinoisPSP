@@ -10,7 +10,9 @@ span:
 series:
   - entity: sensor.ameren_hourly_supply_price
     name: Supply
-    type: column
+    type: line
+    stroke_width: 1
+    curve: stepline
     data_generator: |
       const today = entity.attributes.raw_today || [];
       const tomorrow = entity.attributes.raw_tomorrow || [];
