@@ -51,7 +51,7 @@
         {% set summer_rate = states('input_number.ameren_summer_delivery_charge') | float(0) %}
         {% set winter_rate = states('input_number.ameren_winter_delivery_charge') | float(0) %}
         {% set preferred_credit = states('input_number.ameren_chargesmart_pcp_credit') | float(0) %}
-        {% set peak_surcharge = states('input_number.ameren_peak_surcharge') | float(0) %}
+        {% set peak_surcharge = states('input_number.ameren_chargesmart_npcp_charge') | float(0) %}
 
         {# Determine which seasonal delivery rate to use based on tomorrow's month #}
         {% set delivery_rate = summer_rate if tomorrow.month in [6, 7, 8, 9] else winter_rate %}
