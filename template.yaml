@@ -1,0 +1,219 @@
+- sensor:
+  - name: "Ameren Hourly Delivered Price"
+    unique_id: ameren_hourly_delivered_price
+    state: "{{ states('sensor.ameren_raw_data') }}"
+    state_class: measurement
+    unit_of_measurement: "$/kWh"
+    attributes:
+      raw_today: >
+        {% set today = now() %}
+        {# Fetch the rate values from input_number helpers #}
+        {% set summer_rate = states('input_number.ameren_summer_delivery_charge') | float(0) %}
+        {% set winter_rate = states('input_number.ameren_winter_delivery_charge') | float(0) %}
+        {% set preferred_credit = states('input_number.ameren_chargesmart_pcp_credit') | float(0) %}
+        {% set peak_surcharge = states('input_number.ameren_chargesmart_npcp_charge') | float(0) %}
+        
+        {# Determine which seasonal delivery rate to use based on the current month #}
+        {% set delivery_rate = summer_rate if today.month in [6, 7, 8, 9] else winter_rate %}
+        
+        {% set details = state_attr('sensor.ameren_raw_data', 'hourlyPriceDetails') %}
+        {% if details is not none and details | count > 0 %}
+          [
+          {% for item in details %}
+            {% set hour_index = item.hour | int(-1) - 1 %}
+            {% if 0 <= hour_index <= 23 %}
+              {# Calculate the final price with all adjustments #}
+              {% set base_price = item.price | float(0) %}
+              {% set price_with_delivery = base_price + delivery_rate %}
+              
+              {# Apply peak surcharge from 12 PM to 8 PM (hours 12-19) #}
+              {% set price_with_surcharge = price_with_delivery + (peak_surcharge if 12 <= hour_index <= 19 else 0) %}
+              
+              {# Apply off-peak discount from Midnight to 8 AM (hours 0-7) #}
+              {% set final_price = price_with_surcharge - (preferred_credit if 0 <= hour_index <= 7 else 0) %}
+
+              {
+                "start": "{{ today.replace(hour=hour_index, minute=0, second=0, microsecond=0).isoformat() }}",
+                "end": "{{ (today.replace(hour=hour_index, minute=0, second=0, microsecond=0) + timedelta(hours=1)).isoformat() }}",
+                "value": {{ final_price | round(5) }}
+              }
+              {%- if not loop.last %},{% endif %}
+            {% endif %}
+          {% endfor %}
+          ]
+        {% else %}
+          []
+        {% endif %}
+      tomorrow_valid: "{{ has_value('sensor.ameren_raw_data_tomorrow') }}"
+      raw_tomorrow: >
+        {% set tomorrow = now() + timedelta(days=1) %}
+        {# Fetch the rate values from input_number helpers #}
+        {% set summer_rate = states('input_number.ameren_summer_delivery_charge') | float(0) %}
+        {% set winter_rate = states('input_number.ameren_winter_delivery_charge') | float(0) %}
+        {% set preferred_credit = states('input_number.ameren_chargesmart_pcp_credit') | float(0) %}
+        {% set peak_surcharge = states('input_number.ameren_peak_surcharge') | float(0) %}
+
+        {# Determine which seasonal delivery rate to use based on tomorrow's month #}
+        {% set delivery_rate = summer_rate if tomorrow.month in [6, 7, 8, 9] else winter_rate %}
+
+        {% set details = state_attr('sensor.ameren_raw_data_tomorrow', 'hourlyPriceDetails') %}
+        {% if details is not none and details | count > 0 %}
+          [
+          {% for item in details %}
+            {% set hour_index = item.hour | int(-1) - 1 %}
+            {% if 0 <= hour_index <= 23 %}
+              {# Calculate the final price with all adjustments #}
+              {% set base_price = item.price | float(0) %}
+              {% set price_with_delivery = base_price + delivery_rate %}
+
+              {# Apply peak surcharge from 12 PM to 8 PM (hours 12-19) #}
+              {% set price_with_surcharge = price_with_delivery + (peak_surcharge if 11 <= hour_index <= 18 else 0) %}
+
+              {# Apply off-peak discount from Midnight to 8 AM (hours 0-7) #}
+              {% set final_price = price_with_surcharge - (preferred_credit if 0 <= hour_index <= 7 else 0) %}
+              
+              {
+                "start": "{{ tomorrow.replace(hour=hour_index, minute=0, second=0, microsecond=0).isoformat() }}",
+                "end": "{{ (tomorrow.replace(hour=hour_index, minute=0, second=0, microsecond=0) + timedelta(hours=1)).isoformat() }}",
+                "value": {{ final_price | round(5) }}
+              }
+              {%- if not loop.last %},{% endif %}
+            {% endif %}
+          {% endfor %}
+          ]
+        {% else %}
+          {% set details = state_attr('sensor.miso_raw_data_tomorrow', 'data') %}
+          {% if details is not none and details | count > 0 %}
+            {% set ns = namespace(output=[]) %}
+            {% for item in details %}
+              {# Define the Chicago timezone object #}
+              {% set tz_chicago = namespace(tz=strptime('2000-01-01 00:00:00-05:00', '%Y-%m-%d %H:%M:%S%z').tzinfo) %}
+              
+              {% set start_time_utc = (item.timeInterval.start | as_datetime) %}
+              {% set end_time_utc = (item.timeInterval.end | as_datetime) %}
+
+              {% set start_time = start_time_utc.astimezone(tz_chicago.tz) %}
+              {% set end_time = end_time_utc.astimezone(tz_chicago.tz) %}
+              
+              {% set hour_index = item.timeInterval.value | int(-1) - 1 %}
+              {% set base_price = item.lmp / 1000 %}
+              {% set price_with_delivery = base_price + delivery_rate %}  
+              {# Apply peak surcharge from 12 PM to 8 PM (hours 12-19) #}
+              {% set price_with_surcharge = price_with_delivery + (peak_surcharge if 11 <= hour_index <= 18 else 0) %}
+              {# Apply off-peak discount from Midnight to 8 AM (hours 0-7) #}
+              {% set final_price = price_with_surcharge - (preferred_credit if 0 <= hour_index <= 7 else 0) %}
+
+              {% set ns.output = ns.output + [{
+                  'start': start_time.isoformat(),
+                  'end': end_time.isoformat(),
+                  'value': final_price | round(5)
+                }] %}
+            {% endfor %}
+            {{ ns.output | to_json }}
+          {% else %}
+            []
+          {% endif %}
+        {% endif %}
+
+- sensor:
+  - name: "Ameren Hourly Supply Price"
+    unique_id: ameren_hourly_supply_price
+    state: "{{ states('sensor.ameren_raw_data') }}"
+    state_class: measurement
+    unit_of_measurement: "$/kWh"
+    attributes:
+      raw_today: >
+        {% set details = state_attr('sensor.ameren_raw_data', 'hourlyPriceDetails') %}
+        {% if details is not none and details | count > 0 %}
+          [
+          {% for item in details %}
+            {% set hour_index = item.hour | int(-1) - 1 %}
+            {% if 0 <= hour_index <= 23 %}
+              {
+                "start": "{{ now().replace(hour=hour_index, minute=0, second=0, microsecond=0).isoformat() }}",
+                "end": "{{ (now().replace(hour=hour_index, minute=0, second=0, microsecond=0) + timedelta(hours=1)).isoformat() }}",
+                "value": {{ item.price | round(5) }}
+              }
+              {%- if not loop.last %},{% endif %}
+            {% endif %}
+          {% endfor %}
+          ]
+        {% else %}
+          []
+        {% endif %}
+      tomorrow_valid: "{{ has_value('sensor.ameren_raw_data_tomorrow') or has_value('sensor.miso_raw_data_tomorrow') }}"
+      raw_tomorrow: >
+        {% set details = state_attr('sensor.ameren_raw_data_tomorrow', 'hourlyPriceDetails') %}
+        {% if details is not none and details | count > 0 %}
+          [
+          {% for item in details %}
+            {% set hour_index = item.hour | int(-1) - 1 %}
+            {% if 0 <= hour_index <= 23 %}
+              {
+                "start": "{{ (now().replace(hour=hour_index, minute=0, second=0, microsecond=0) + timedelta(days=1)).isoformat() }}",
+                "end": "{{ (now().replace(hour=hour_index, minute=0, second=0, microsecond=0) + timedelta(days=1,hours=1)).isoformat() }}",
+                "value": {{ item.price | round(5) }}
+              }
+              {%- if not loop.last %},{% endif %}
+            {% endif %}
+          {% endfor %}
+          ]
+        {% else %}
+          {% set details = state_attr('sensor.miso_raw_data_tomorrow', 'data') %}
+          {% if details is not none and details | count > 0 %}
+            {% set ns = namespace(output=[]) %}
+            {% for item in details %}
+              {# Define the Chicago timezone object #}
+              {% set tz_chicago = namespace(tz=strptime('2000-01-01 00:00:00-05:00', '%Y-%m-%d %H:%M:%S%z').tzinfo) %}
+              
+              {% set start_time_utc = (item.timeInterval.start | as_datetime) %}
+              {% set end_time_utc = (item.timeInterval.end | as_datetime) %}
+
+              {% set start_time = start_time_utc.astimezone(tz_chicago.tz) %}
+              {% set end_time = end_time_utc.astimezone(tz_chicago.tz) %}
+              
+              {% set lmp_value = item.lmp / 1000 %}
+              {% set ns.output = ns.output + [{
+                  'start': start_time.isoformat(),
+                  'end': end_time.isoformat(),
+                  'value': lmp_value | round(5)
+                }] %}
+            {% endfor %}
+            {{ ns.output | to_json }}
+          {% else %}
+            []
+          {% endif %}
+        {% endif %}
+
+- sensor:
+  - name: "MISO Hourly Supply Price Tomorrow"
+    unique_id: miso_hourly_supply_price_tomorrow
+    state: "{{ states('sensor.miso_raw_data_tomorrow') }}"
+    state_class: measurement
+    unit_of_measurement: "$/kWh"
+    attributes:
+      raw_today: >
+        {% set ns = namespace(output=[]) %}
+        {% set details = state_attr('sensor.miso_raw_data_tomorrow', 'data') %}
+        {% if details is not none and details | count > 0 %}
+          {% for item in details %}
+            {# Define the Chicago timezone object #}
+            {% set tz_chicago = namespace(tz=strptime('2000-01-01 00:00:00-05:00', '%Y-%m-%d %H:%M:%S%z').tzinfo) %}
+            
+            {% set start_time_utc = (item.timeInterval.start | as_datetime) %}
+            {% set end_time_utc = (item.timeInterval.end | as_datetime) %}
+
+            {% set start_time = start_time_utc.astimezone(tz_chicago.tz) %}
+            {% set end_time = end_time_utc.astimezone(tz_chicago.tz) %}
+            
+            {% set lmp_value = item.lmp / 1000 %}
+            {% set ns.output = ns.output + [{
+                'start': start_time.isoformat(),
+                'end': end_time.isoformat(),
+                'value': lmp_value | round(5)
+              }] %}
+          {% endfor %}
+        {% else %}
+          []
+        {% endif %}
+        {{ ns.output | to_json }}

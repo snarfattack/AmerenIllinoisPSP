@@ -1,0 +1,54 @@
+- resource: "https://www.ameren.com/api/ameren/promotion/RtpHourlyPricesbyDate"
+  method: POST
+  scan_interval: 172000
+  # This payload uses a template to dynamically insert the current date
+  payload_template: '{SelectedDate:"{{ now().year }}-{{ now().month }}-{{ now().day }}"}'
+  headers:
+    Content-Type: "application/json"
+  # This sensor will poll the API periodically (default is 30 seconds, you can change with scan_interval)
+  sensor:
+    - name: "Ameren Raw Data"
+      # The sensor's state must be a simple value. We'll use the price of the first hour.
+      value_template: "{{ value_json.hourlyPriceDetails[0].price }}"
+      # This is the most important part: store the full price list in an attribute.
+      json_attributes:
+        - "hourlyPriceDetails"
+
+- resource: https://www.ameren.com/api/ameren/promotion/RtpHourlyPricesbyDate
+  method: POST
+  scan_interval: 172000
+  payload_template: '{SelectedDate:"{{ (now()+timedelta(days=1)).year }}-{{ (now()+timedelta(days=1)).month }}-{{ (now()+timedelta(days=1)).day }}"}'
+  headers: 
+    Content-Type: "application/json"
+    Host: "www.ameren.com"
+  sensor:
+    - name: "Ameren Raw Data Tomorrow"
+      # The sensor's state must be a simple value. We'll use the price of the first hour.
+      value_template: "{{ value_json.hourlyPriceDetails[0].price }}"
+      # This is the most important part: store the full price list in an attribute.
+      json_attributes:
+        - "hourlyPriceDetails"
+
+- resource_template: https://apim.misoenergy.org/pricing/v1/day-ahead/{{ (now()+timedelta(days=1)).year }}-{{ (now()+timedelta(days=1)).month }}-{{ (now()+timedelta(days=1)).day }}/lmp-exante?node=ILLINOIS.HUB&pageNumber=1
+  method: GET
+  scan_interval: 172000
+  headers: 
+    Cache-Control: no-cache
+    Ocp-Apim-Subscription-Key: !secret misoapikey
+  sensor:
+    - name: "MISO Raw Data Tomorrow"
+      value_template: "{{ value_json.page.totalElements}}"
+      json_attributes:
+        - "data"
+
+#- resource_template: https://apim.misoenergy.org/pricing/v1/day-ahead/{{ now().year }}-{{ now().month }}-{{ now().day }}/lmp-exante?node=ILLINOIS.HUB&pageNumber=1
+#  method: GET
+#  scan_interval: 9999999
+#  headers: 
+#    Cache-Control: no-cache
+#    Ocp-Apim-Subscription-Key: !secret misoapikey
+#  sensor:
+#    - name: "MISO Raw Data"
+#      value_template: "{{ value_json.page.totalElements}}"
+#      json_attributes:
+#        - "data"

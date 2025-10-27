@@ -1,0 +1,53 @@
+type: custom:apexcharts-card
+header:
+  show: false
+  title: Ameren Hourly Prices (Today & Tomorrow)
+now:
+  show: true
+graph_span: 48h
+span:
+  start: day
+series:
+  - entity: sensor.ameren_hourly_supply_price
+    name: Supply
+    type: column
+    data_generator: |
+      const today = entity.attributes.raw_today || [];
+      const tomorrow = entity.attributes.raw_tomorrow || [];
+
+      // Map today's data and convert to cents
+      const todayData = today.map(d => {
+        return [new Date(d.start).getTime(), d.value * 100];
+      });
+
+      // Map tomorrow's data and convert to cents
+      const tomorrowData = tomorrow.map(d => {
+        const date = new Date(d.start);
+        date.setDate(date.getDate());
+        return [date.getTime(), d.value * 100];
+      });
+
+      return todayData.concat(tomorrowData);
+yaxis:
+  - id: cents
+    decimals: 2
+    apex_config:
+      title:
+        text: ¢/kWh
+apex_config:
+  chart:
+    height: 200
+  xaxis:
+    tooltip:
+      enabled: false
+  tooltip:
+    x:
+      format: ddd, h:mm TT
+    "y":
+      formatter: |
+        EVAL:function(value) {
+          return value.toFixed(3) + " ¢/kWh";
+        }
+grid_options:
+  columns: 24
+  rows: auto
