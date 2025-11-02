@@ -29,7 +29,7 @@
       json_attributes:
         - "hourlyPriceDetails"
 
-- resource_template: https://apim.misoenergy.org/pricing/v1/day-ahead/{{ (now()+timedelta(days=1)).year }}-{{ (now()+timedelta(days=1)).month }}-{{ (now()+timedelta(days=1)).day }}/lmp-exante?node=ILLINOIS.HUB&pageNumber=1
+- resource_template: https://apim.misoenergy.org/pricing/v1/day-ahead/{{ (now()+timedelta(days=1)).year }}-{{ "%02d" % (now()+timedelta(days=1)).month }}-{{ "%02d" % (now()+timedelta(days=1)).day }}/lmp-exante?node=ILLINOIS.HUB&pageNumber=1
   method: GET
   scan_interval: 172000
   headers: 
