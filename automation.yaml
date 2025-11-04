@@ -51,4 +51,6 @@ actions:
     data:
       entity_id:
         - sensor.ameren_raw_data_tomorrow
+        - sensor.ameren_raw_data
 mode: single
+
