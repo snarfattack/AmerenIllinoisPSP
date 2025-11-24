@@ -40,8 +40,8 @@
                 {# Apply peak surcharge from 11 AM to 7 PM (hours 11-18) #}
                 {% set price_with_surcharge = price_with_delivery + (peak_surcharge if 11 <= hour_index <= 18 else 0) %}
                 
-                {# Apply off-peak discount from Midnight to 7 AM (hours 0-6) #}
-                {% set final_price = price_with_surcharge - (preferred_credit if 0 <= hour_index <= 6 else 0) %}
+                {# Apply off-peak discount from 11 PM to 7 AM (hours 23-6) #}
+                {% set final_price = price_with_surcharge - (preferred_credit if hour_index in [23, 0, 1, 2, 3, 4, 5, 6] else 0) %}
 
                 {
                   "start": "{{ today.replace(hour=hour_index, minute=0, second=0, microsecond=0).isoformat() }}",
@@ -65,8 +65,8 @@
                 {% set price_with_delivery = base_price + delivery_rate %}  
                 {# Apply peak surcharge from 11 PM to 7 PM (hours 11-18) #}
                 {% set price_with_surcharge = price_with_delivery + (peak_surcharge if 11 <= hour_index <= 18 else 0) %}
-                {# Apply off-peak discount from Midnight to 7 AM (hours 0-6) #}
-                {% set final_price = price_with_surcharge - (preferred_credit if 0 <= hour_index <= 6 else 0) %}
+                {# Apply off-peak discount from 11 PM to 7 AM (hours 23-6) #}
+                {% set final_price = price_with_surcharge - (preferred_credit if hour_index in [23, 0, 1, 2, 3, 4, 5, 6] else 0) %}
 
                 {% set ns.output = ns.output + [{
                     'start': start_time.isoformat(),
@@ -100,13 +100,11 @@
                 {# Calculate the final price with all adjustments #}
                 {% set base_price = item.price | float(0) %}
                 {% set price_with_delivery = base_price + delivery_rate %}
-                
                 {# Apply peak surcharge from 11 PM to 7 PM (hours 11-18) #}
                 {% set price_with_surcharge = price_with_delivery + (peak_surcharge if 11 <= hour_index <= 18 else 0) %}
+                {# Apply off-peak discount from 11 PM to 7 AM (hours 23-6) #}
+                {% set final_price = price_with_surcharge - (preferred_credit if hour_index in [23, 0, 1, 2, 3, 4, 5, 6] else 0) %}
 
-                {# Apply off-peak discount from Midnight to 7 AM (hours 0-6) #}
-                {% set final_price = price_with_surcharge - (preferred_credit if 0 <= hour_index <= 6 else 0) %}
-                
                 {
                   "start": "{{ tomorrow.replace(hour=hour_index, minute=0, second=0, microsecond=0).isoformat() }}",
                   "end": "{{ (tomorrow.replace(hour=hour_index, minute=0, second=0, microsecond=0) + timedelta(hours=1)).isoformat() }}",
@@ -129,8 +127,8 @@
                 {% set price_with_delivery = base_price + delivery_rate %}  
                 {# Apply peak surcharge from 11 PM to 7 PM (hours 11-18) #}
                 {% set price_with_surcharge = price_with_delivery + (peak_surcharge if 11 <= hour_index <= 18 else 0) %}
-                {# Apply off-peak discount from Midnight to 7 AM (hours 0-6) #}
-                {% set final_price = price_with_surcharge - (preferred_credit if 0 <= hour_index <= 6 else 0) %}
+                {# Apply off-peak discount from 11 PM to 7 AM (hours 23-6) #}
+                {% set final_price = price_with_surcharge - (preferred_credit if hour_index in [23, 0, 1, 2, 3, 4, 5, 6] else 0) %}
 
                 {% set ns.output = ns.output + [{
                     'start': start_time.isoformat(),
@@ -143,6 +141,7 @@
               []
             {% endif %}
           {% endif %}
+
 
 - sensor:
     - name: "Ameren Hourly Supply Price"
